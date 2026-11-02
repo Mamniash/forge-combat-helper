@@ -2,11 +2,12 @@ import OBR from './sdk.js';
 import {PREFIX as P,saveModifier,number,damage,health} from './core.js';
 import {ready,diceRoll,saveNotation,saveTotals,SOURCE} from './dice.js';
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let targets=[],results=[],undo=null,sceneId=null,busy=false,sceneEpoch=0,targetVersion=0,pendingIds=null;
+let targets=[],results=[],undo=null,sceneId=null,busy=false,sceneEpoch=0,targetVersion=0,pendingIds=null,locked=false;
+function lock(value){locked=value;if(value){targetVersion++;pendingIds=null;}for(const id of ['ability','dc','damage','success','visibility'])$(id).disabled=value;$('roll').disabled=value&&results.length>0;}
 function message(s){$('status').textContent=s;}
 function reset(){results=[];$('results').replaceChildren();$('apply').disabled=true;$('targets').hidden=false;}
 async function check(){if(await OBR.player.getRole()!=='GM')throw Error('Только для мастера');if(!await OBR.scene.isReady())throw Error('Открой сцену');const id=String(sceneEpoch);if(sceneId&&sceneId!==id){targets=[];undo=null;reset();$('undo').disabled=true;throw Error('Сцена изменилась');}sceneId=id;}
-function bind(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;const version=sceneEpoch;$('controls').disabled=true;try{await fn();}catch(e){message(e.message);}finally{busy=false;$('controls').disabled=false;$('apply').disabled=!results.length||!!results.applied;$('undo').disabled=!undo;if(version!==sceneEpoch){targets=[];undo=null;reset();$('undo').disabled=true;}if(pendingIds){const ids=pendingIds;pendingIds=null;await loadTargets(ids).catch(e=>message(e.message));}}};}
+function bind(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;const version=sceneEpoch;$('controls').disabled=true;try{await fn();}catch(e){message(e.message);}finally{busy=false;$('controls').disabled=false;$('apply').disabled=!results.length||!!results.applied;$('undo').disabled=!undo;if(version!==sceneEpoch){targets=[];undo=null;reset();$('undo').disabled=true;}lock(locked);if(pendingIds&&!locked){const ids=pendingIds;pendingIds=null;await loadTargets(ids).catch(e=>message(e.message));}}};}
 $('close').onclick=()=>OBR.popover.close(SOURCE+'/panel');
 for(const k of ['ability','dc','damage','success'])$(k).oninput=()=>{reset();if(k==='ability'&&targets.length)loadTargets(targets.map(t=>t.id)).catch(e=>message(e.message));};
 function renderTargets(){
@@ -15,12 +16,12 @@ function renderTargets(){
  $('targets').querySelectorAll('select').forEach(el=>{el.value=String(targets[+el.dataset.i][el.dataset.field]);el.onchange=()=>{targets[+el.dataset.i][el.dataset.field]=el.dataset.field==='mode'?+el.value:el.value;reset();};});
 }
 async function loadTargets(ids){
- const version=++targetVersion,epoch=sceneEpoch;await check();const items=ids.length?await OBR.scene.items.getItems(ids):[];if(version!==targetVersion||epoch!==sceneEpoch)return;
+ if(locked)return;const version=++targetVersion,epoch=sceneEpoch;await check();const items=ids.length?await OBR.scene.items.getItems(ids):[];if(version!==targetVersion||epoch!==sceneEpoch)return;
  const next=items.filter(item=>item.metadata[P+'name']).map(item=>{const m=item.metadata,name=m[P+'name'],old=targets.find(t=>t.id===item.id);return {id:item.id,name,hp:number(m[P+'Z005'],'Хиты '+name),temp:number(m[P+'Z042']??0,'Временные хиты '+name),mod:saveModifier(m,$('ability').value),mode:old?.mode||0,defense:old?.defense||'normal',notes:`Сопротивления: ${m[P+'Z031']||'—'}; иммунитеты: ${m[P+'Z032']||'—'}; уязвимости: ${m[P+'Z030']||'—'}`};});
  targets=next;reset();renderTargets();message(targets.length?'':'Выдели токены на карте');
 }
 bind('roll',async()=>{
- await check();await loadTargets(await OBR.player.getSelection()||[]);if(!targets.length)throw Error('Выдели токены на карте');reset();const epoch=sceneEpoch,snapshot=targets.map(t=>({...t})),dc=number($('dc').value,'СЛ'),onSuccess=$('success').value,visibility=$('visibility').value;
+ if(results.length)return;if(!targets.length)throw Error('Выдели токены на карте');lock(true);await check();reset();const epoch=sceneEpoch,snapshot=targets.map(t=>({...t})),dc=number($('dc').value,'СЛ'),onSuccess=$('success').value,visibility=$('visibility').value;
  if(dc<1||dc>100)throw Error('СЛ: 1–100');
  const notation=$('damage').value.toLowerCase().replaceAll('к','d').replace(/\s/g,'');
  if(!/^(?:\d+d\d+|\d+)(?:[+-](?:\d+d\d+|\d+))*$/.test(notation))throw Error('Урон: например 8d6+2');
@@ -38,11 +39,12 @@ bind('roll',async()=>{
  message('');
 });
 bind('apply',async()=>{await check();if(!results.length||results.applied)throw Error('Нет новых результатов');for(const el of $('results').querySelectorAll('input')){const r=results[+el.dataset.result];r.amount=number(el.value,'Урон');health(r.hp,r.temp,r.amount);}const ids=results.map(r=>r.id);const current=await OBR.scene.items.getItems(ids);if(current.length!==ids.length)throw Error('Одна из целей удалена. Загрузите цели заново.');const changes=[];await OBR.scene.items.updateItems(ids,items=>{for(const r of results){const item=items.find(t=>t.id===r.id);const m=item.metadata;if(number(m[P+'Z005'],'Хиты')!==r.hp||number(m[P+'Z042']??0,'Временные хиты')!==r.temp)throw Error('Хиты изменились: '+r.name+'. Загрузите цели заново.');}for(const r of results){const item=items.find(t=>t.id===r.id),m=item.metadata,h=health(r.hp,r.temp,r.amount);changes.push({id:r.id,before:{hp:m[P+'Z005'],temp:m[P+'Z042']},after:h});m[P+'Z005']=h.hp;m[P+'Z042']=h.temp;}});undo={sceneId,changes};results.applied=true;$('results').querySelectorAll('input').forEach(el=>el.disabled=true);$('undo').disabled=false;message('Применено');});
-bind('undo',async()=>{await check();if(!undo||undo.sceneId!==sceneId)throw Error('Нет применения для отмены');const ids=undo.changes.map(x=>x.id);if((await OBR.scene.items.getItems(ids)).length!==ids.length)throw Error('Цель удалена — отмена невозможна');await OBR.scene.items.updateItems(ids,items=>{for(const c of undo.changes){const m=items.find(i=>i.id===c.id).metadata;if(Number(m[P+'Z005'])!==c.after.hp||Number(m[P+'Z042']??0)!==c.after.temp)throw Error('После применения хиты изменились. Отмена остановлена.');}for(const c of undo.changes){const m=items.find(i=>i.id===c.id).metadata;m[P+'Z005']=c.before.hp;if(c.before.temp===undefined)delete m[P+'Z042'];else m[P+'Z042']=c.before.temp;}});undo=null;await loadTargets(await OBR.player.getSelection()||[]);message('Отменено');});
+bind('undo',async()=>{await check();if(!undo||undo.sceneId!==sceneId)throw Error('Нет применения для отмены');const ids=undo.changes.map(x=>x.id);if((await OBR.scene.items.getItems(ids)).length!==ids.length)throw Error('Цель удалена — отмена невозможна');await OBR.scene.items.updateItems(ids,items=>{for(const c of undo.changes){const m=items.find(i=>i.id===c.id).metadata;if(Number(m[P+'Z005'])!==c.after.hp||Number(m[P+'Z042']??0)!==c.after.temp)throw Error('После применения хиты изменились. Отмена остановлена.');}for(const c of undo.changes){const m=items.find(i=>i.id===c.id).metadata;m[P+'Z005']=c.before.hp;if(c.before.temp===undefined)delete m[P+'Z042'];else m[P+'Z042']=c.before.temp;}});undo=null;message('Урон отменён');});
+bind('clear',async()=>{lock(false);pendingIds=null;undo=null;reset();await loadTargets(await OBR.player.getSelection()||[]);});
 OBR.onReady(async()=>{
- OBR.scene.onReadyChange(()=>{sceneEpoch++;targetVersion++;sceneId=null;targets=[];pendingIds=null;undo=null;reset();renderTargets();$('undo').disabled=true;message('Сцена изменилась');});
+ OBR.scene.onReadyChange(()=>{sceneEpoch++;targetVersion++;lock(false);sceneId=null;targets=[];pendingIds=null;undo=null;reset();renderTargets();$('undo').disabled=true;message('Сцена изменилась');});
  let selectionKey=null;
- const sync=ids=>{ids=ids||[];const key=JSON.stringify([...ids].sort());if(key===selectionKey)return;selectionKey=key;if(busy){pendingIds=ids;return;}loadTargets(ids).catch(e=>{targets=[];reset();renderTargets();message(e.message);});};
+ const sync=ids=>{ids=ids||[];const key=JSON.stringify([...ids].sort());if(key===selectionKey)return;selectionKey=key;if(locked)return;if(busy){pendingIds=ids;return;}loadTargets(ids).catch(e=>{targets=[];reset();renderTargets();message(e.message);});};
  OBR.player.onChange(player=>sync(player.selection));
  try{await check();$('controls').disabled=false;sync(await OBR.player.getSelection());}catch(e){message(e.message);}
 });

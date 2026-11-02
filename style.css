@@ -6,3 +6,5 @@
 .success{display:flex;align-items:center;gap:6px;margin-bottom:8px}.success select{width:100px;margin:0;height:25px}
 .target{grid-template-columns:minmax(0,1fr) 61px 42px}.target strong{font-size:11px}
 .footer{gap:4px}.footer button{padding:3px 5px;font-size:11px}td:first-child{max-width:80px;overflow-wrap:anywhere}td input{width:42px}
+
+.reset{width:100%;margin-top:6px}
