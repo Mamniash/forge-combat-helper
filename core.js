@@ -6,3 +6,16 @@ export function roll(expression,random=die){const s=expression.toLowerCase().rep
 export function save(mod,dc,mode=0,random=die){const dice=[random(20)];if(mode)dice.push(random(20));const natural=mode>0?Math.max(...dice):mode<0?Math.min(...dice):dice[0];return {dice,total:natural+mod,success:natural+mod>=dc};}
 export function damage(base,success,onSuccess,defense){let n=success?(onSuccess==='half'?Math.floor(base/2):onSuccess==='zero'?0:base):base;if(defense==='immune')n=0;if(defense==='resist')n=Math.floor(n/2);if(defense==='vulnerable')n*=2;return n;}
 export function health(hp,temp,amount){if([hp,temp,amount].some(n=>!Number.isSafeInteger(n)||n<0))throw Error('Некорректные хиты/урон');return {hp:Math.max(0,hp-Math.max(0,amount-temp)),temp:Math.max(0,temp-amount)};}
+
+export const ABILITIES={str:'Z017',dex:'Z018',con:'Z019',int:'Z020',wis:'Z021',cha:'Z022'};
+function optionalInteger(value){
+ if(typeof value!=='number'&&typeof value!=='string')return null;
+ if(typeof value==='string'&&!/^[+-]?\d+$/.test(value.trim()))return null;
+ const n=Number(value);return Number.isSafeInteger(n)?n:null;
+}
+export function saveModifier(metadata,ability){
+ const explicit=optionalInteger(metadata[PREFIX+SAVES[ability]]);
+ if(explicit!==null)return explicit;
+ const score=optionalInteger(metadata[PREFIX+ABILITIES[ability]]);
+ return score===null?0:Math.floor((score-10)/2);
+}

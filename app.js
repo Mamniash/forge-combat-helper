@@ -1,5 +1,5 @@
 import OBR from './sdk.js';
-import {PREFIX as P,SAVES,number,damage,health} from './core.js';
+import {PREFIX as P,saveModifier,number,damage,health} from './core.js';
 import {ready,diceRoll,saveNotation,saveTotals,SOURCE} from './dice.js';
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let targets=[],results=[],undo=null,sceneId=null,busy=false,sceneEpoch=0,targetVersion=0,pendingIds=null;
@@ -16,7 +16,7 @@ function renderTargets(){
 }
 async function loadTargets(ids){
  const version=++targetVersion,epoch=sceneEpoch;await check();const items=ids.length?await OBR.scene.items.getItems(ids):[];if(version!==targetVersion||epoch!==sceneEpoch)return;
- const next=items.filter(item=>item.metadata[P+'name']).map(item=>{const m=item.metadata,name=m[P+'name'],old=targets.find(t=>t.id===item.id);return {id:item.id,name,hp:number(m[P+'Z005'],'Хиты '+name),temp:number(m[P+'Z042']??0,'Временные хиты '+name),mod:number(m[P+SAVES[$('ability').value]],'Спас '+name),mode:old?.mode||0,defense:old?.defense||'normal',notes:`Сопротивления: ${m[P+'Z031']||'—'}; иммунитеты: ${m[P+'Z032']||'—'}; уязвимости: ${m[P+'Z030']||'—'}`};});
+ const next=items.filter(item=>item.metadata[P+'name']).map(item=>{const m=item.metadata,name=m[P+'name'],old=targets.find(t=>t.id===item.id);return {id:item.id,name,hp:number(m[P+'Z005'],'Хиты '+name),temp:number(m[P+'Z042']??0,'Временные хиты '+name),mod:saveModifier(m,$('ability').value),mode:old?.mode||0,defense:old?.defense||'normal',notes:`Сопротивления: ${m[P+'Z031']||'—'}; иммунитеты: ${m[P+'Z032']||'—'}; уязвимости: ${m[P+'Z030']||'—'}`};});
  targets=next;reset();renderTargets();message(targets.length?'':'Выдели токены на карте');
 }
 bind('roll',async()=>{

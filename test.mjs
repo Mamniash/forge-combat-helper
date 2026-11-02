@@ -7,3 +7,18 @@ test('half then resistance rounding',()=>assert.equal(damage(31,true,'half','res
 test('immunity and vulnerability',()=>{assert.equal(damage(31,false,'half','immune'),0);assert.equal(damage(31,true,'half','vulnerable'),30);});
 test('temporary hp absorbed first, zero floor',()=>{assert.deepEqual(health(38,6,28),{hp:16,temp:0});assert.deepEqual(health(38,6,4),{hp:38,temp:2});assert.deepEqual(health(5,0,28),{hp:0,temp:0});});
 test('missing data never becomes zero silently',()=>{assert.throws(()=>number('','HP'));assert.throws(()=>number(undefined,'save'));assert.equal(number('+5','save'),5);});
+
+import {saveModifier,PREFIX,ABILITIES,SAVES} from './core.js';
+test('explicit saves including numeric/string zero take priority',()=>{
+ for(const value of [0,'0','+0',5,'+5',-2,'-2'])assert.equal(saveModifier({[PREFIX+'Z024']:value,[PREFIX+'Z018']:18},'dex'),Number(value));
+});
+test('all six missing saves derive from ability score and round down',()=>{
+ for(const ability of Object.keys(SAVES))for(const score of [8,9,10,11,14,19])assert.equal(saveModifier({[PREFIX+ABILITIES[ability]]:String(score)},ability),Math.floor((score-10)/2));
+});
+test('empty, invalid and missing saves fall through; absent abilities use zero',()=>{
+ for(const value of [undefined,null,'','  ','—','abc',false,[],{},1.5,Infinity]){
+  assert.equal(saveModifier({[PREFIX+'Z024']:value,[PREFIX+'Z018']:14},'dex'),2);
+  assert.equal(saveModifier({[PREFIX+'Z024']:value,[PREFIX+'Z018']:value},'dex'),0);
+ }
+ assert.equal(saveModifier({},'con'),0);
+});
