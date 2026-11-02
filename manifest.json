@@ -1,6 +1,6 @@
 {
   "name": "Forge Combat Helper",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "manifest_version": 1,
   "description": "Массовые спасы и применение урона к Forge. Панель мастера.",
   "author": "Alexander",
