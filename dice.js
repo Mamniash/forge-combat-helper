@@ -1,6 +1,6 @@
 export const SOURCE='local.forge-combat';
 export function ready(obr,timeout=2500){const requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{let off=()=>{},timer;const finish=(e)=>{clearTimeout(timer);off();e?reject(e):resolve();};off=obr.broadcast.onMessage('dice-plus/isReady',({data})=>{if(data?.requestId===requestId&&data.ready===true)finish();});timer=setTimeout(()=>finish(Error('Включи Dice+ в комнате')),timeout);obr.broadcast.sendMessage('dice-plus/isReady',{requestId,timestamp:Date.now()},{destination:'LOCAL'}).catch(finish);});}
-export async function diceRoll(obr,notation,rollTarget='self',timeout=45000){
+export async function diceRoll(obr,notation,rollTarget='everyone',timeout=45000){
  const playerId=await obr.player.getId(),playerName=await obr.player.getName(),rollId=crypto.randomUUID();
  return new Promise((resolve,reject)=>{let done=false,timer;const off=[];const finish=(err,result)=>{if(done)return;done=true;clearTimeout(timer);off.forEach(fn=>fn());err?reject(err):resolve(result);};
  off.push(obr.broadcast.onMessage(SOURCE+'/roll-result',({data})=>{if(data?.rollId!==rollId||data.playerId!==playerId)return;const r=data.result;if(!r||!Number.isFinite(r.totalValue))return finish(Error('Некорректный ответ Dice+'));finish(null,r);}));
